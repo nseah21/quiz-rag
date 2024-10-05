@@ -12,7 +12,7 @@ import json
 
 load_dotenv()
 
-file_name = "kurose-ross"
+file_name = "psychological-disorders"
 file_path = f"./textbooks/{file_name}.pdf"
 persist_directory = f"./chromadb/{file_name}"
 
@@ -114,7 +114,5 @@ def get_rag_chain(question_count, question_topic, extra_context=None):
     return rag_chain
 
 
-result = get_rag_chain(4, "TCP Congestion Control").invoke(
-    "Make the questions very challenging."
-)
+result = get_rag_chain(3, "Mood Disorders").invoke()
 print(json.dumps(result, indent=4))
