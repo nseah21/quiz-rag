@@ -12,8 +12,8 @@ import json
 
 load_dotenv()
 
-file_name = "psychological-disorders"
-file_path = f"./textbooks/{file_name}.pdf"
+file_name = "12_datalake_printable"
+file_path = f"./notes/{file_name}.pdf"
 persist_directory = f"./chromadb/{file_name}"
 
 llm = ChatOpenAI(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
@@ -114,5 +114,5 @@ def get_rag_chain(question_count, question_topic, extra_context=None):
     return rag_chain
 
 
-result = get_rag_chain(3, "Mood Disorders").invoke()
+result = get_rag_chain(3, "Cloud Data Lakes").invoke("Please generate challenging questions.")
 print(json.dumps(result, indent=4))
