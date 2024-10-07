@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import os
 import json
+from sklearn.metrics.pairwise import cosine_similarity
 
 load_dotenv()
 
@@ -85,11 +86,31 @@ def get_prompt_from_template(question_count, question_topic, extra_context):
     return f"""
 Please generate {question_count} quiz question(s) on the topic \"{question_topic}\".
 The quiz questions need to be in multiple choice format, where each question has 4 options. There should only be ONE correct answer for each quiz question.
-As much as possible, try to generate the questions and answers based on the vector store, as well as your existing knowledge of the topic.
+Try to base your questions and answers on the following context:
+{extra_context}
 The output should be in the following format:
 {get_sample_quiz_question_format()}
-{additional_info}
     """
+
+
+def cosine_similarity_filter(question_topic, retrieved_docs, embedding_function):
+    """Filter documents based on cosine similarity with the question topic."""
+    # Convert the question topic into an embedding vector
+    question_embedding = embedding_function.embed_query(question_topic)
+
+    # Embed each retrieved document
+    doc_embeddings = [
+        embedding_function.embed_query(doc.page_content) for doc in retrieved_docs
+    ]
+
+    # Calculate cosine similarity between question and each document
+    similarities = cosine_similarity([question_embedding], doc_embeddings)[0]
+
+    # Sort the documents by similarity score (descending) and return top 3 most relevant docs
+    ranked_docs = sorted(
+        zip(similarities, retrieved_docs), key=lambda x: x[0], reverse=True
+    )
+    return [doc for _, doc in ranked_docs[:3]]  # Returning top 3 relevant docs
 
 
 def get_rag_chain(question_count, question_topic, extra_context=None):
@@ -101,17 +122,29 @@ def get_rag_chain(question_count, question_topic, extra_context=None):
         persist_directory=persist_directory, embedding_function=OpenAIEmbeddings()
     )
     retriever = vectorstore.as_retriever()
-    parser = JsonOutputParser(pydantic_object=QuizQuestionAndAnswer)
 
+    # Retrieve relevant documents
+    retrieved_docs = retriever.retrieve(question_topic)
+
+    # Apply cosine similarity filtering
+    filtered_docs = cosine_similarity_filter(
+        question_topic, retrieved_docs, OpenAIEmbeddings()
+    )
+
+    # Format the filtered documents
+    formatted_context = format_docs(filtered_docs)
+
+    # Construct the prompt using filtered context
     prompt_runnable = RunnableLambda(
         func=lambda _: get_prompt_from_template(
-            question_count, question_topic, extra_context
+            question_count, question_topic, formatted_context
         )
     )
-    format_docs_runnable = RunnableLambda(func=format_docs)
+
+    parser = JsonOutputParser(pydantic_object=QuizQuestionAndAnswer)
 
     rag_chain = (
-        {"context": retriever | format_docs_runnable, "question": RunnablePassthrough()}
+        {"context": retrieved_docs, "question": RunnablePassthrough()}
         | prompt_runnable
         | llm
         | parser
@@ -141,7 +174,9 @@ def vanilla_gpt(question_count, question_topic, extra_context=None):
 
 
 ### With RAG
-result = get_rag_chain(5, "Latest features in Java").invoke("Please generate me only the latest features in Java (Java 18 and above)!")
+result = get_rag_chain(5, "Latest features in Java").invoke(
+    "Please generate me only the latest features in Java (Java 18 and above)!"
+)
 print(json.dumps(result, indent=4))
 
 ### Without RAG
