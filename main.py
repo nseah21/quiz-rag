@@ -7,16 +7,18 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from openai import OpenAI
 import os
 import json
 
 load_dotenv()
 
-file_name = "12_datalake_printable"
+file_name = "java-se-language-updates"
 file_path = f"./notes/{file_name}.pdf"
 persist_directory = f"./chromadb/{file_name}"
+model = "gpt-3.5-turbo-0125"
 
-llm = ChatOpenAI(model="gpt-4o", api_key=os.getenv("OPENAI_API_KEY"))
+llm = ChatOpenAI(model=model, api_key=os.getenv("OPENAI_API_KEY"))
 
 
 class QuizQuestionAndAnswer(BaseModel):
@@ -53,6 +55,7 @@ def get_sample_quiz_question_format():
 
 
 def load_file():
+    print("Loading PDF file from `notes` folder")
     loader = PyPDFLoader(file_path)
     pages = []
     for page in loader.load():
@@ -63,6 +66,7 @@ def load_file():
 def create_vector_store():
     docs = load_file()
 
+    print("Creating vector store from loaded PDF...")
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     splits = text_splitter.split_documents(docs)
     _ = Chroma.from_documents(
@@ -92,6 +96,7 @@ def get_rag_chain(question_count, question_topic, extra_context=None):
     if not os.path.exists(persist_directory):
         create_vector_store()
 
+    print("Using vector store for RAG...")
     vectorstore = Chroma(
         persist_directory=persist_directory, embedding_function=OpenAIEmbeddings()
     )
@@ -114,5 +119,31 @@ def get_rag_chain(question_count, question_topic, extra_context=None):
     return rag_chain
 
 
-result = get_rag_chain(3, "Cloud Data Lakes").invoke("Please generate challenging questions.")
+def vanilla_gpt(question_count, question_topic, extra_context=None):
+    print("Generating response using vanilla GPT...")
+    client = OpenAI()
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": "You are an instructor who is specialised in creating quiz questions.",
+            },
+            {
+                "role": "user",
+                "content": get_prompt_from_template(
+                    question_count, question_topic, extra_context
+                ),
+            },
+        ],
+    )
+    return completion.choices[0].message.content
+
+
+### With RAG
+result = get_rag_chain(5, "Latest features in Java").invoke("Please generate me only the latest features in Java (Java 18 and above)!")
 print(json.dumps(result, indent=4))
+
+### Without RAG
+# result = vanilla_gpt(5, "Latest features in Java", "")
+# print(result)
