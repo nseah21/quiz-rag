@@ -87,8 +87,8 @@ def get_prompt_from_template(question_count, question_topic, extra_context):
 Please generate {question_count} quiz question(s) on the topic \"{question_topic}\".
 The quiz questions need to be in multiple choice format, where each question has 4 options. There should only be ONE correct answer for each quiz question.
 Try to base your questions and answers on the following context:
-{extra_context}
-The output should be in the following format:
+{additional_info}
+The output should be in the following JSON format:
 {get_sample_quiz_question_format()}
     """
 
@@ -124,31 +124,43 @@ def get_rag_chain(question_count, question_topic, extra_context=None):
     retriever = vectorstore.as_retriever()
 
     # Retrieve relevant documents
-    retrieved_docs = retriever.retrieve(question_topic)
+    retrieved_docs = retriever.invoke(question_topic)
+
+    # Debug retrieved documents
+    # print("Retrieved Docs:", retrieved_docs)
 
     # Apply cosine similarity filtering
     filtered_docs = cosine_similarity_filter(
         question_topic, retrieved_docs, OpenAIEmbeddings()
     )
 
-    # Format the filtered documents
+    # Debug filtered docs
+    # print("Filtered Docs:", filtered_docs)
+
+    # Format the filtered documents into context string
     formatted_context = format_docs(filtered_docs)
+
+    # Debug formatted context
+    # print("Formatted Context:", formatted_context)
 
     # Construct the prompt using filtered context
     prompt_runnable = RunnableLambda(
         func=lambda _: get_prompt_from_template(
-            question_count, question_topic, formatted_context
+            question_count, question_topic, formatted_context 
         )
     )
 
     parser = JsonOutputParser(pydantic_object=QuizQuestionAndAnswer)
 
+    # Create a chain for RAG using run instead of invoke
     rag_chain = (
-        {"context": retrieved_docs, "question": RunnablePassthrough()}
+        {"context": prompt_runnable, "question": RunnablePassthrough()}
         | prompt_runnable
         | llm
         | parser
     )
+
+    # Return the constructed chain (don't call run inside this function)
     return rag_chain
 
 
@@ -174,11 +186,10 @@ def vanilla_gpt(question_count, question_topic, extra_context=None):
 
 
 ### With RAG
-result = get_rag_chain(5, "Latest features in Java").invoke(
-    "Please generate me only the latest features in Java (Java 18 and above)!"
-)
+rag_chain = get_rag_chain(5, "Latest features in Java")
+result = rag_chain.invoke("Please generate me only the latest features in Java (Java 18 and above)!")
 print(json.dumps(result, indent=4))
 
 ### Without RAG
-# result = vanilla_gpt(5, "Latest features in Java", "")
+# result = vanilla_gpt(5, "Latest features in Java", "Please generate me only the latest features in Java")
 # print(result)
