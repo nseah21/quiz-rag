@@ -14,10 +14,10 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 load_dotenv()
 
-file_name = "java-se-language-updates"
+file_name = "psychological-disorders"
 file_path = f"./notes/{file_name}.pdf"
 persist_directory = f"./chromadb/{file_name}"
-model = "gpt-3.5-turbo-0125"
+model = "gpt-4o"
 
 llm = ChatOpenAI(model=model, api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -186,8 +186,8 @@ def vanilla_gpt(question_count, question_topic, extra_context=None):
 
 
 ### With RAG
-rag_chain = get_rag_chain(5, "Latest features in Java")
-result = rag_chain.invoke("Please generate me only the latest features in Java (Java 18 and above)!")
+rag_chain = get_rag_chain(5, "Mood disorders")
+result = rag_chain.invoke("Please generate some easy questions")
 print(json.dumps(result, indent=4))
 
 ### Without RAG
